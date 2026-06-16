@@ -843,6 +843,12 @@ const Simulator = {
 
 // ===== INITIALIZE APP =====
 document.addEventListener('DOMContentLoaded', () => {
+    pendo.initialize({
+        visitor: {
+            id: ''
+        }
+    });
+
     Store.init();
     UI.init();
     Simulator.start();
