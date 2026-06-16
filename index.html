@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentWatch - AI Agent Cost Monitor & Guardrail Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>AgentWatch</span>
+                </div>
+                <p class="tagline">AI Cost Guardrails</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="dashboard">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-section="agents">
+                    <i class="fas fa-robot"></i>
+                    <span>Agents</span>
+                </a>
+                <a href="#" class="nav-item" data-section="budgets">
+                    <i class="fas fa-wallet"></i>
+                    <span>Budgets</span>
+                </a>
+                <a href="#" class="nav-item" data-section="alerts">
+                    <i class="fas fa-bell"></i>
+                    <span>Alerts</span>
+                    <span class="badge" id="alert-count">0</span>
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="theme-toggle">
+                    <i class="fas fa-moon"></i>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-switch">
+                        <span class="slider"></span>
+                    </label>
+                    <i class="fas fa-sun"></i>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="menu-toggle" id="menu-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1>Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Search agents...">
+                    </div>
+                    <button class="btn btn-primary" id="add-agent-btn">
+                        <i class="fas fa-plus"></i>
+                        Add Agent
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section class="section active" id="dashboard-section">
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-dollar-sign"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-label">Total Cost Today</span>
+                            <span class="stat-value" id="total-cost">$0.00</span>
+                            <span class="stat-change positive">
+                                <i class="fas fa-arrow-up"></i> 12% from yesterday
+                            </span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-label">Active Agents</span>
+                            <span class="stat-value" id="active-agents">0</span>
+                            <span class="stat-change">
+                                <i class="fas fa-circle"></i> Running now
+                            </span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-label">Budget Alerts</span>
+                            <span class="stat-value" id="budget-alerts">0</span>
+                            <span class="stat-change warning">
+                                <i class="fas fa-bell"></i> Needs attention
+                            </span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon success">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-label">Agents Stopped</span>
+                            <span class="stat-value" id="agents-stopped">0</span>
+                            <span class="stat-change success">
+                                <i class="fas fa-shield-alt"></i> Guardrails active
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cost Chart -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h2>Cost Overview (Last 7 Days)</h2>
+                        <div class="chart-filters">
+                            <button class="filter-btn active" data-range="7d">7D</button>
+                            <button class="filter-btn" data-range="30d">30D</button>
+                            <button class="filter-btn" data-range="90d">90D</button>
+                        </div>
+                    </div>
+                    <canvas id="cost-chart"></canvas>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="activity-container">
+                    <h2>Recent Activity</h2>
+                    <div class="activity-list" id="activity-list">
+                        <!-- Activity items will be added here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Agents Section -->
+            <section class="section" id="agents-section">
+                <div class="section-header">
+                    <h2>AI Agents</h2>
+                    <button class="btn btn-primary" id="add-agent-btn-2">
+                        <i class="fas fa-plus"></i>
+                        Add Agent
+                    </button>
+                </div>
+                <div class="agents-table-container">
+                    <table class="agents-table">
+                        <thead>
+                            <tr>
+                                <th>Agent Name</th>
+                                <th>Model</th>
+                                <th>Cost Today</th>
+                                <th>Budget</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agents-tbody">
+                            <!-- Agent rows will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Budgets Section -->
+            <section class="section" id="budgets-section">
+                <div class="section-header">
+                    <h2>Budget Management</h2>
+                    <button class="btn btn-primary" id="set-budget-btn">
+                        <i class="fas fa-plus"></i>
+                        Set Budget
+                    </button>
+                </div>
+                <div class="budgets-grid" id="budgets-grid">
+                    <!-- Budget cards will be added here -->
+                </div>
+            </section>
+
+            <!-- Alerts Section -->
+            <section class="section" id="alerts-section">
+                <div class="section-header">
+                    <h2>Alerts & Notifications</h2>
+                    <button class="btn btn-secondary" id="clear-alerts-btn">
+                        <i class="fas fa-trash"></i>
+                        Clear All
+                    </button>
+                </div>
+                <div class="alerts-list" id="alerts-list">
+                    <!-- Alert items will be added here -->
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section class="section" id="settings-section">
+                <h2>Settings</h2>
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h3>API Configuration</h3>
+                        <div class="form-group">
+                            <label>OpenAI API Key</label>
+                            <input type="password" placeholder="sk-..." id="openai-key">
+                        </div>
+                        <div class="form-group">
+                            <label>Anthropic API Key</label>
+                            <input type="password" placeholder="sk-ant-..." id="anthropic-key">
+                        </div>
+                        <button class="btn btn-primary">Save Keys</button>
+                    </div>
+                    <div class="settings-card">
+                        <h3>Alert Preferences</h3>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" checked> Email alerts when budget hits 80%
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" checked> Auto-stop agents at 100% budget
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox"> Daily cost summary email
+                            </label>
+                        </div>
+                        <button class="btn btn-primary">Save Preferences</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add Agent Modal -->
+    <div class="modal" id="add-agent-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Agent</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <form id="add-agent-form">
+                <div class="form-group">
+                    <label>Agent Name</label>
+                    <input type="text" placeholder="e.g., Customer Support Bot" id="agent-name" required>
+                </div>
+                <div class="form-group">
+                    <label>AI Model</label>
+                    <select id="agent-model">
+                        <option value="gpt-4">GPT-4</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        <option value="claude-3-opus">Claude 3 Opus</option>
+                        <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                        <option value="claude-3-haiku">Claude 3 Haiku</option>
+                        <option value="gemini-pro">Gemini Pro</option>
+                        <option value="llama-3">Llama 3</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Daily Budget ($)</label>
+                    <input type="number" placeholder="50.00" id="agent-budget" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Description (Optional)</label>
+                    <textarea placeholder="What does this agent do?" id="agent-description"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Agent</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Set Budget Modal -->
+    <div class="modal" id="set-budget-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Set Budget</h2>
+                <button class="modal-close" id="budget-modal-close">&times;</button>
+            </div>
+            <form id="set-budget-form">
+                <div class="form-group">
+                    <label>Select Agent</label>
+                    <select id="budget-agent-select">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Daily Budget ($)</label>
+                    <input type="number" placeholder="100.00" id="budget-amount" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Alert Threshold (%)</label>
+                    <input type="number" placeholder="80" id="budget-threshold" min="1" max="100" value="80" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="budget-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Set Budget</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Novus.ai Integration (Required for hackathon) -->
+    <script>
+        // Novus.ai tracking code
+        window.novusConfig = {
+            projectId: 'agentwatch-demo',
+            apiKey: 'demo-key-for-hackathon'
+        };
+    </script>
+    <script src="https://novus.pendo.io/agent/novus-agent.min.js" async></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
