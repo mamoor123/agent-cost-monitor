@@ -269,6 +269,11 @@ const Store = {
     }
 };
 
+// ===== PENDO TRACK EVENT DEDUPLICATION =====
+const _pendoTrackedAutoStopped = new Set();
+const _pendoTrackedThresholdExceeded = new Set();
+let _pendoSearchDebounceTimer = null;
+
 // ===== UI CONTROLLER =====
 const UI = {
     currentSection: 'dashboard',
@@ -303,10 +308,18 @@ const UI = {
 
         // Theme switch
         document.getElementById('theme-switch').addEventListener('change', (e) => {
+            const previousTheme = Store.settings.theme;
             const theme = e.target.checked ? 'light' : 'dark';
             this.applyTheme(theme);
             Store.settings.theme = theme;
             Store.saveToStorage();
+
+            if (typeof pendo !== 'undefined') {
+                pendo.track('theme_changed', {
+                    theme: theme,
+                    previous_theme: previousTheme
+                });
+            }
         });
 
         // Add Agent buttons
@@ -321,6 +334,14 @@ const UI = {
 
         // Clear Alerts button
         document.getElementById('clear-alerts-btn').addEventListener('click', () => {
+            if (typeof pendo !== 'undefined') {
+                const alertTypes = [...new Set(Store.alerts.map(a => a.type))];
+                pendo.track('alerts_bulk_cleared', {
+                    alerts_count: Store.alerts.length,
+                    alert_types_cleared: alertTypes.join(',')
+                });
+            }
+
             Store.clearAlerts();
             this.renderAlerts();
             this.updateStats();
@@ -355,7 +376,24 @@ const UI = {
 
         // Search
         document.querySelector('.search-box input').addEventListener('input', (e) => {
-            this.filterAgents(e.target.value);
+            const query = e.target.value;
+            this.filterAgents(query);
+
+            clearTimeout(_pendoSearchDebounceTimer);
+            _pendoSearchDebounceTimer = setTimeout(() => {
+                if (typeof pendo !== 'undefined' && query.length > 0) {
+                    const visibleRows = document.querySelectorAll('#agents-tbody tr');
+                    let resultsCount = 0;
+                    visibleRows.forEach(row => {
+                        if (row.style.display !== 'none') resultsCount++;
+                    });
+                    pendo.track('agent_search_executed', {
+                        query: query.substring(0, 100),
+                        results_count: resultsCount,
+                        total_agents_count: Store.agents.length
+                    });
+                }
+            }, 500);
         });
 
         // Close modals on outside click
@@ -416,6 +454,17 @@ const UI = {
 
         if (name && model && budget) {
             Store.addAgent({ name, model, budget, description });
+
+            if (typeof pendo !== 'undefined') {
+                pendo.track('agent_created', {
+                    agent_name: name,
+                    model: model,
+                    budget: budget,
+                    has_description: Boolean(description),
+                    total_agents_count: Store.agents.length
+                });
+            }
+
             this.renderAgents();
             this.updateStats();
             this.hideModal('add-agent-modal');
@@ -430,7 +479,22 @@ const UI = {
         const threshold = parseInt(document.getElementById('budget-threshold').value);
 
         if (agentId && budget) {
+            const agent = Store.agents.find(a => a.id === agentId);
+            const previousBudget = agent ? agent.budget : null;
+
             Store.updateBudget(agentId, budget, threshold);
+
+            if (typeof pendo !== 'undefined' && agent) {
+                pendo.track('budget_updated', {
+                    agent_id: String(agentId),
+                    agent_name: agent.name,
+                    budget_amount: budget,
+                    alert_threshold: threshold,
+                    previous_budget: previousBudget,
+                    model: agent.model
+                });
+            }
+
             this.renderAgents();
             this.renderBudgets();
             this.updateStats();
@@ -707,7 +771,24 @@ const UI = {
     },
 
     toggleAgent(id) {
+        const agent = Store.agents.find(a => a.id === id);
+        const previousStatus = agent ? agent.status : null;
+
         Store.toggleAgentStatus(id);
+
+        if (typeof pendo !== 'undefined' && agent) {
+            pendo.track('agent_status_toggled', {
+                agent_id: String(agent.id),
+                agent_name: agent.name,
+                new_status: agent.status,
+                previous_status: previousStatus,
+                model: agent.model,
+                cost_today: agent.costToday,
+                budget: agent.budget,
+                budget_usage_pct: Math.round((agent.costToday / agent.budget) * 100)
+            });
+        }
+
         this.renderAgents();
         this.updateStats();
     },
@@ -725,6 +806,20 @@ const UI = {
 
     removeAgent(id) {
         if (confirm('Are you sure you want to remove this agent?')) {
+            const agent = Store.agents.find(a => a.id === id);
+
+            if (typeof pendo !== 'undefined' && agent) {
+                pendo.track('agent_removed', {
+                    agent_id: String(agent.id),
+                    agent_name: agent.name,
+                    model: agent.model,
+                    budget: agent.budget,
+                    cost_today: agent.costToday,
+                    cost_week: agent.costWeek,
+                    agent_status: agent.status
+                });
+            }
+
             Store.removeAgent(id);
             this.renderAgents();
             this.renderBudgets();
@@ -734,6 +829,18 @@ const UI = {
     },
 
     dismissAlert(id) {
+        const alert = Store.alerts.find(a => a.id === id);
+
+        if (typeof pendo !== 'undefined' && alert) {
+            pendo.track('alert_dismissed', {
+                alert_id: String(alert.id),
+                alert_type: alert.type,
+                alert_title: alert.title,
+                agent_id: alert.agentId ? String(alert.agentId) : '',
+                remaining_alerts_count: Store.alerts.length - 1
+            });
+        }
+
         Store.dismissAlert(id);
         this.renderAlerts();
         this.updateStats();
@@ -830,11 +937,38 @@ const Simulator = {
                     `${agent.name} has exceeded its daily budget and was automatically stopped`, agent.id);
                 Store.addActivity('alert', 'fa-stop-circle',
                     `${agent.name} auto-stopped: budget exceeded`);
+
+                if (typeof pendo !== 'undefined' && !_pendoTrackedAutoStopped.has(agent.id)) {
+                    _pendoTrackedAutoStopped.add(agent.id);
+                    pendo.track('agent_auto_stopped', {
+                        agent_id: String(agent.id),
+                        agent_name: agent.name,
+                        model: agent.model,
+                        budget: agent.budget,
+                        cost_today: agent.costToday,
+                        overage_amount: parseFloat((agent.costToday - agent.budget).toFixed(2)),
+                        cost_week: agent.costWeek
+                    });
+                }
             } else if (percentage >= threshold && percentage < threshold + 5) {
                 Store.addAlert('warning', `Budget Alert: ${agent.name}`,
                     `${agent.name} has used ${percentage.toFixed(0)}% of its daily budget`, agent.id);
                 Store.addActivity('alert', 'fa-exclamation-triangle',
                     `${agent.name} approaching budget limit (${percentage.toFixed(0)}%)`);
+
+                if (typeof pendo !== 'undefined' && !_pendoTrackedThresholdExceeded.has(agent.id)) {
+                    _pendoTrackedThresholdExceeded.add(agent.id);
+                    pendo.track('budget_threshold_exceeded', {
+                        agent_id: String(agent.id),
+                        agent_name: agent.name,
+                        model: agent.model,
+                        budget: agent.budget,
+                        cost_today: agent.costToday,
+                        percentage_used: parseFloat(percentage.toFixed(1)),
+                        threshold: threshold,
+                        remaining_budget: parseFloat((agent.budget - agent.costToday).toFixed(2))
+                    });
+                }
             }
         });
         Store.saveToStorage();
