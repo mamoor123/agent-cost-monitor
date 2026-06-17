@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentWatch - Auto Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Overlay controls */
+        .demo-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 10000;
+            pointer-events: none;
+        }
+        .demo-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10001;
+            display: flex;
+            gap: 10px;
+            pointer-events: all;
+        }
+        .demo-controls button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        #startBtn { background: #10b981; color: #fff; }
+        #startBtn:hover { background: #059669; }
+        #pauseBtn { background: #f59e0b; color: #000; display: none; }
+        #resetBtn { background: #ef4444; color: #fff; }
+
+        /* Step indicator */
+        .step-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10001;
+            background: rgba(0,0,0,0.85);
+            padding: 15px 25px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            pointer-events: none;
+        }
+        .step-indicator .step-text {
+            font-size: 16px;
+            color: #10b981;
+            font-weight: 600;
+        }
+        .step-indicator .step-desc {
+            font-size: 13px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .step-indicator .progress-bar {
+            height: 3px;
+            background: #333;
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .step-indicator .progress-fill {
+            height: 100%;
+            background: #10b981;
+            width: 0%;
+            transition: width 0.5s linear;
+        }
+
+        /* Cursor simulation */
+        .fake-cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 10002;
+            transition: all 0.8s ease-in-out;
+            opacity: 0;
+        }
+        .fake-cursor::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Cpath d='M2 2 L2 18 L7 13 L12 18 Z' fill='white' stroke='black' stroke-width='1'/%3E%3C/svg%3E") no-repeat;
+        }
+        .fake-cursor.clicking {
+            animation: clickPulse 0.3s ease;
+        }
+        @keyframes clickPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.85); }
+            100% { transform: scale(1); }
+        }
+
+        /* Highlight effect */
+        .highlight-ring {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            border: 3px solid #10b981;
+            border-radius: 8px;
+            animation: pulseRing 1.5s ease infinite;
+            opacity: 0;
+        }
+        @keyframes pulseRing {
+            0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+            100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+        }
+
+        /* Typing effect for search */
+        .typing-indicator {
+            position: absolute;
+            background: rgba(16,185,129,0.2);
+            border: 1px solid #10b981;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #10b981;
+            pointer-events: none;
+            z-index: 10003;
+            opacity: 0;
+        }
+
+        /* The actual app iframe */
+        .app-frame {
+            width: 100%;
+            height: calc(100vh - 0px);
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- The actual app embedded -->
+    <iframe id="appFrame" class="app-frame" src="index.html"></iframe>
+
+    <!-- Fake cursor -->
+    <div class="fake-cursor" id="fakeCursor"></div>
+
+    <!-- Highlight ring -->
+    <div class="highlight-ring" id="highlightRing"></div>
+
+    <!-- Step indicator -->
+    <div class="step-indicator" id="stepIndicator">
+        <div class="step-text" id="stepText">Ready</div>
+        <div class="step-desc" id="stepDesc">Click Start to begin the demo</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="demo-controls">
+        <button id="startBtn" onclick="startDemo()">▶ Start Demo</button>
+        <button id="pauseBtn" onclick="pauseDemo()">⏸ Pause</button>
+        <button id="resetBtn" onclick="resetDemo()">↺ Reset</button>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let isPaused = false;
+        let currentStep = 0;
+        let frame = null;
+        let doc = null;
+
+        // Wait for iframe to load
+        document.getElementById('appFrame').onload = function() {
+            frame = document.getElementById('appFrame').contentDocument;
+            doc = frame;
+            // Set dark theme
+            doc.documentElement.setAttribute('data-theme', 'dark');
+        };
+
+        function sleep(ms) {
+            return new Promise(resolve => {
+                if (isPaused) {
+                    const check = setInterval(() => {
+                        if (!isPaused) { clearInterval(check); resolve(); }
+                    }, 100);
+                } else {
+                    setTimeout(resolve, ms);
+                }
+            });
+        }
+
+        function setStep(num, text, desc) {
+            currentStep = num;
+            document.getElementById('stepText').textContent = `Step ${num}: ${text}`;
+            document.getElementById('stepDesc').textContent = desc;
+        }
+
+        function setProgress(pct) {
+            document.getElementById('progressFill').style.width = pct + '%';
+        }
+
+        function moveCursor(x, y, show = true) {
+            const cursor = document.getElementById('fakeCursor');
+            if (show) {
+                cursor.style.opacity = '1';
+                cursor.style.left = x + 'px';
+                cursor.style.top = y + 'px';
+            } else {
+                cursor.style.opacity = '0';
+            }
+        }
+
+        function clickAt(x, y) {
+            return new Promise(async (resolve) => {
+                const cursor = document.getElementById('fakeCursor');
+                moveCursor(x, y);
+                await sleep(400);
+                cursor.classList.add('clicking');
+                await sleep(200);
+                cursor.classList.remove('clicking');
+
+                // Actually click in iframe
+                const el = doc.elementFromPoint(x, y - 0);
+                if (el) el.click();
+                await sleep(300);
+                resolve();
+            });
+        }
+
+        function highlightElement(selector, duration = 2000) {
+            return new Promise(async (resolve) => {
+                const el = doc.querySelector(selector);
+                if (!el) { resolve(); return; }
+                const rect = el.getBoundingClientRect();
+                const ring = document.getElementById('highlightRing');
+                ring.style.left = (rect.left - 5) + 'px';
+                ring.style.top = (rect.top - 5) + 'px';
+                ring.style.width = (rect.width + 10) + 'px';
+                ring.style.height = (rect.height + 10) + 'px';
+                ring.style.opacity = '1';
+                await sleep(duration);
+                ring.style.opacity = '0';
+                resolve();
+            });
+        }
+
+        function typeInField(selector, text) {
+            return new Promise(async (resolve) => {
+                const el = doc.querySelector(selector);
+                if (!el) { resolve(); return; }
+                el.focus();
+                el.value = '';
+                for (let i = 0; i < text.length; i++) {
+                    el.value += text[i];
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    await sleep(80 + Math.random() * 60);
+                }
+                await sleep(200);
+                resolve();
+            });
+        }
+
+        async function startDemo() {
+            if (isRunning && !isPaused) return;
+            if (isPaused) { isPaused = false; return; }
+
+            isRunning = true;
+            isPaused = false;
+            document.getElementById('startBtn').textContent = '▶ Running...';
+            document.getElementById('startBtn').style.background = '#666';
+            document.getElementById('pauseBtn').style.display = 'inline-block';
+
+            try {
+                await runDemo();
+            } catch(e) {
+                console.error('Demo error:', e);
+            }
+
+            isRunning = false;
+            document.getElementById('startBtn').textContent = '▶ Start Demo';
+            document.getElementById('startBtn').style.background = '#10b981';
+            document.getElementById('pauseBtn').style.display = 'none';
+        }
+
+        function pauseDemo() {
+            isPaused = true;
+            document.getElementById('pauseBtn').textContent = '▶ Resume';
+            document.getElementById('pauseBtn').onclick = () => {
+                isPaused = false;
+                document.getElementById('pauseBtn').textContent = '⏸ Pause';
+                document.getElementById('pauseBtn').onclick = pauseDemo;
+            };
+        }
+
+        function resetDemo() {
+            location.reload();
+        }
+
+        async function runDemo() {
+            const iframe = document.getElementById('appFrame');
+
+            // ===== STEP 1: INTRO =====
+            setStep(1, 'Welcome to AgentWatch', 'AI Agent Cost Monitoring Dashboard');
+            setProgress(5);
+            moveCursor(0, 0, false);
+            await sleep(3000);
+
+            // ===== STEP 2: DASHBOARD OVERVIEW =====
+            setStep(2, 'Dashboard Overview', 'Showing total costs, active agents, and alerts');
+            setProgress(10);
+
+            // Highlight stat cards
+            await highlightElement('.stat-card:nth-child(1)', 2000);
+            await highlightElement('.stat-card:nth-child(2)', 1500);
+            await highlightElement('.stat-card:nth-child(3)', 1500);
+            await highlightElement('.stat-card:nth-child(4)', 1500);
+
+            // ===== STEP 3: COST CHART =====
+            setStep(3, 'Cost Chart', '7-day cost overview with interactive filters');
+            setProgress(20);
+            await highlightElement('.chart-container', 2500);
+
+            // Click 30D filter
+            const btn30d = doc.querySelector('[data-range="30d"]');
+            if (btn30d) {
+                const rect = btn30d.getBoundingClientRect();
+                await clickAt(rect.left + 15, rect.top + 10);
+                await sleep(1500);
+            }
+
+            // Click 7D back
+            const btn7d = doc.querySelector('[data-range="7d"]');
+            if (btn7d) {
+                const rect = btn7d.getBoundingClientRect();
+                await clickAt(rect.left + 15, rect.top + 10);
+                await sleep(1000);
+            }
+
+            // ===== STEP 4: RECENT ACTIVITY =====
+            setStep(4, 'Recent Activity', 'Live feed of agent events and cost changes');
+            setProgress(30);
+            await highlightElement('.activity-container', 2500);
+            moveCursor(0, 0, false);
+            await sleep(1500);
+
+            // ===== STEP 5: NAVIGATE TO AGENTS =====
+            setStep(5, 'AI Agents', 'View and manage all your AI agents');
+            setProgress(40);
+            const agentsNav = doc.querySelector('[data-section="agents"]');
+            if (agentsNav) {
+                const rect = agentsNav.getBoundingClientRect();
+                await clickAt(rect.left + 50, rect.top + 10);
+                await sleep(2000);
+            }
+
+            // Highlight the agents table
+            await highlightElement('.agents-table-container', 2500);
+
+            // Scroll down in the iframe to show more agents
+            const agentsSection = doc.getElementById('agents-section');
+            if (agentsSection) {
+                agentsSection.scrollTop = 200;
+                await sleep(1000);
+                agentsSection.scrollTop = 0;
+                await sleep(1000);
+            }
+
+            // ===== STEP 6: ADD NEW AGENT =====
+            setStep(6, 'Add New Agent', 'Adding "Marketing Assistant" with GPT-4 Turbo');
+            setProgress(55);
+
+            // Click Add Agent button
+            const addBtn = doc.getElementById('add-agent-btn-2');
+            if (addBtn) {
+                const rect = addBtn.getBoundingClientRect();
+                await clickAt(rect.left + 40, rect.top + 10);
+                await sleep(1000);
+            }
+
+            // Fill in the form with typing effect
+            await typeInField('#agent-name', 'Marketing Assistant');
+            await sleep(500);
+
+            // Select model
+            const modelSelect = doc.getElementById('agent-model');
+            if (modelSelect) {
+                modelSelect.value = 'gpt-4-turbo';
+                modelSelect.dispatchEvent(new Event('change'));
+                await sleep(500);
+            }
+
+            await typeInField('#agent-budget', '75.00');
+            await sleep(500);
+
+            await typeInField('#agent-description', 'Handles marketing copy and social media posts');
+            await sleep(800);
+
+            // Submit form
+            const submitBtn = doc.querySelector('#add-agent-form button[type="submit"]');
+            if (submitBtn) {
+                const rect = submitBtn.getBoundingClientRect();
+                await clickAt(rect.left + 30, rect.top + 10);
+                await sleep(1500);
+            }
+
+            // ===== STEP 7: NAVIGATE TO BUDGETS =====
+            setStep(7, 'Budget Management', 'Set and monitor spending limits');
+            setProgress(65);
+            const budgetsNav = doc.querySelector('[data-section="budgets"]');
+            if (budgetsNav) {
+                const rect = budgetsNav.getBoundingClientRect();
+                await clickAt(rect.left + 50, rect.top + 10);
+                await sleep(2000);
+            }
+
+            // Highlight budget cards
+            await highlightElement('.budgets-grid', 2500);
+            moveCursor(0, 0, false);
+            await sleep(1500);
+
+            // ===== STEP 8: NAVIGATE TO ALERTS =====
+            setStep(8, 'Alerts & Notifications', 'Budget warnings and auto-stop events');
+            setProgress(75);
+            const alertsNav = doc.querySelector('[data-section="alerts"]');
+            if (alertsNav) {
+                const rect = alertsNav.getBoundingClientRect();
+                await clickAt(rect.left + 50, rect.top + 10);
+                await sleep(2000);
+            }
+
+            // Highlight alerts
+            await highlightElement('.alerts-list', 2500);
+            moveCursor(0, 0, false);
+            await sleep(1500);
+
+            // ===== STEP 9: NAVIGATE TO SETTINGS =====
+            setStep(9, 'Settings', 'API keys and alert preferences');
+            setProgress(85);
+            const settingsNav = doc.querySelector('[data-section="settings"]');
+            if (settingsNav) {
+                const rect = settingsNav.getBoundingClientRect();
+                await clickAt(rect.left + 50, rect.top + 10);
+                await sleep(2000);
+            }
+
+            await highlightElement('.settings-grid', 2500);
+            moveCursor(0, 0, false);
+            await sleep(1500);
+
+            // ===== STEP 10: TOGGLE THEME =====
+            setStep(10, 'Theme Toggle', 'Switch between dark and light mode');
+            setProgress(92);
+
+            const themeSwitch = doc.getElementById('theme-switch');
+            if (themeSwitch) {
+                const rect = themeSwitch.getBoundingClientRect();
+                // Click the switch
+                themeSwitch.click();
+                await sleep(2000);
+            }
+
+            // ===== STEP 11: BACK TO DASHBOARD =====
+            setStep(11, 'Final View', 'Dashboard with all features demonstrated');
+            setProgress(98);
+
+            const dashNav = doc.querySelector('[data-section="dashboard"]');
+            if (dashNav) {
+                const rect = dashNav.getBoundingClientRect();
+                await clickAt(rect.left + 50, rect.top + 10);
+                await sleep(2500);
+            }
+
+            // Toggle back to dark theme
+            if (themeSwitch) {
+                themeSwitch.click();
+                await sleep(1500);
+            }
+
+            // ===== DONE =====
+            setStep('✓', 'Demo Complete!', 'AgentWatch - AI Agent Cost Monitor & Guardrails');
+            setProgress(100);
+            moveCursor(0, 0, false);
+            await sleep(5000);
+
+            document.getElementById('stepIndicator').style.opacity = '0';
+        }
+    </script>
+</body>
+</html>
