@@ -60,3 +60,11 @@ AgentWatch gives product managers a single dashboard to track all AI agent costs
 
 ## Impact
 AgentWatch prevents the #1 risk in AI agent deployment: runaway costs. By providing real-time visibility and automatic enforcement, it gives product managers the confidence to deploy AI agents without fear of budget overruns.
+
+## Live Demo
+🔗 https://mamoor123.github.io/agent-cost-monitor/
+
+## Author
+Built with ❤️ by Mamoor Ahmed
+- GitHub: [@mamoor123](https://github.com/mamoor123)
+- Email: mamoor.ahmed86@gmail.com
